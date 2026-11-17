@@ -1,7 +1,7 @@
 # 电控组第三次招新培训作业 —— 三灯流水灯 + OLED + 串口控制
 
-- 姓名：`[待填写]`
-- 学号：`[待填写]`
+- 姓名：陈少兵
+- 学号：20253001907
 - 开发板：STM32F103C8T6（Blue Pill）
 - 开发环境：CLion + STM32CubeMX + ARM GNU Toolchain + OpenOCD + ST-Link V2
 
@@ -128,7 +128,7 @@ openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg \
 
 ## 七、演示视频
 
-`[视频链接 / 文件名待补充]`
+仓库内文件：[video/demo.mp4](video/demo.mp4)
 
 ## 八、思考题
 
