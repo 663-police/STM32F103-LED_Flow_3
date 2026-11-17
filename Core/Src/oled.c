@@ -1,0 +1,174 @@
+#include "oled.h"
+
+#define OLED_SCL_PIN   GPIO_PIN_8
+#define OLED_SDA_PIN   GPIO_PIN_9
+#define OLED_GPIO      GPIOB
+
+/* 5x7 font: space 0-9 A-Z : = , . - */
+static const uint8_t Font5x7[][5] = {
+    {0x00,0x00,0x00,0x00,0x00}, /* space */
+    {0x3E,0x51,0x49,0x45,0x3E}, /* 0 */
+    {0x00,0x42,0x7F,0x40,0x00}, /* 1 */
+    {0x42,0x61,0x51,0x49,0x46}, /* 2 */
+    {0x21,0x41,0x45,0x4B,0x31}, /* 3 */
+    {0x18,0x14,0x12,0x7F,0x10}, /* 4 */
+    {0x27,0x45,0x45,0x45,0x39}, /* 5 */
+    {0x3C,0x4A,0x49,0x49,0x30}, /* 6 */
+    {0x01,0x71,0x09,0x05,0x03}, /* 7 */
+    {0x36,0x49,0x49,0x49,0x36}, /* 8 */
+    {0x06,0x49,0x49,0x29,0x1E}, /* 9 */
+    {0x7E,0x11,0x11,0x11,0x7E}, /* A */
+    {0x7F,0x49,0x49,0x49,0x36}, /* B */
+    {0x3E,0x41,0x41,0x41,0x22}, /* C */
+    {0x7F,0x41,0x41,0x22,0x1C}, /* D */
+    {0x7F,0x49,0x49,0x49,0x41}, /* E */
+    {0x7F,0x09,0x09,0x09,0x01}, /* F */
+    {0x3E,0x41,0x49,0x49,0x7A}, /* G */
+    {0x7F,0x08,0x08,0x08,0x7F}, /* H */
+    {0x00,0x41,0x7F,0x41,0x00}, /* I */
+    {0x20,0x40,0x41,0x3F,0x01}, /* J */
+    {0x7F,0x08,0x14,0x22,0x41}, /* K */
+    {0x7F,0x40,0x40,0x40,0x40}, /* L */
+    {0x7F,0x02,0x0C,0x02,0x7F}, /* M */
+    {0x7F,0x04,0x08,0x10,0x7F}, /* N */
+    {0x3E,0x41,0x41,0x41,0x3E}, /* O */
+    {0x7F,0x09,0x09,0x09,0x06}, /* P */
+    {0x3E,0x41,0x51,0x21,0x5E}, /* Q */
+    {0x7F,0x09,0x19,0x29,0x46}, /* R */
+    {0x46,0x49,0x49,0x49,0x31}, /* S */
+    {0x01,0x01,0x7F,0x01,0x01}, /* T */
+    {0x3F,0x40,0x40,0x40,0x3F}, /* U */
+    {0x1F,0x20,0x40,0x20,0x1F}, /* V */
+    {0x3F,0x40,0x38,0x40,0x3F}, /* W */
+    {0x63,0x14,0x08,0x14,0x63}, /* X */
+    {0x07,0x08,0x70,0x08,0x07}, /* Y */
+    {0x61,0x51,0x49,0x45,0x43}, /* Z */
+    {0x00,0x36,0x36,0x00,0x00}, /* : */
+    {0x14,0x14,0x14,0x14,0x14}, /* = */
+    {0x00,0x50,0x30,0x00,0x00}, /* , */
+    {0x00,0x60,0x60,0x00,0x00}, /* . */
+    {0x08,0x08,0x08,0x08,0x08}, /* - */
+};
+
+static void I2C_Delay(void) {
+    for (volatile uint32_t i = 0; i < 100; i++) { __NOP(); }
+}
+
+static void SCL(uint8_t v) {
+    HAL_GPIO_WritePin(OLED_GPIO, OLED_SCL_PIN, v ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    I2C_Delay();
+}
+
+static void SDA(uint8_t v) {
+    HAL_GPIO_WritePin(OLED_GPIO, OLED_SDA_PIN, v ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    I2C_Delay();
+}
+
+static void I2C_Start(void) {
+    SDA(1); SCL(1); SDA(0); SCL(0);
+}
+
+static void I2C_Stop(void) {
+    SDA(0); SCL(1); SDA(1);
+}
+
+static void I2C_WriteByte(uint8_t b) {
+    for (uint8_t i = 0; i < 8; i++) {
+        SDA((b & 0x80) ? 1 : 0);
+        b <<= 1;
+        SCL(1);
+        SCL(0);
+    }
+    SDA(1);
+    SCL(1);
+    SCL(0);
+}
+
+static void OLED_Write(uint8_t ctrl, uint8_t data) {
+    I2C_Start();
+    I2C_WriteByte(0x78);
+    I2C_WriteByte(ctrl);
+    I2C_WriteByte(data);
+    I2C_Stop();
+}
+
+static void OLED_Cmd(uint8_t c) { OLED_Write(0x00, c); }
+static void OLED_Data(uint8_t d) { OLED_Write(0x40, d); }
+
+static void OLED_SetPos(uint8_t page, uint8_t x) {
+    OLED_Cmd(0xB0 + page);
+    OLED_Cmd(0x00 + (x & 0x0F));
+    OLED_Cmd(0x10 + (x >> 4));
+}
+
+void OLED_Init(void) {
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+
+    GPIO_InitTypeDef g = {0};
+    g.Pin = OLED_SCL_PIN | OLED_SDA_PIN;
+    g.Mode = GPIO_MODE_OUTPUT_OD;
+    g.Pull = GPIO_PULLUP;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(OLED_GPIO, &g);
+
+    SCL(1); SDA(1);
+    HAL_Delay(20);
+
+    OLED_Cmd(0xAE);
+    OLED_Cmd(0xD5); OLED_Cmd(0x80);
+    OLED_Cmd(0xA8); OLED_Cmd(0x3F);
+    OLED_Cmd(0xD3); OLED_Cmd(0x00);
+    OLED_Cmd(0x40);
+    OLED_Cmd(0x8D); OLED_Cmd(0x14);
+    OLED_Cmd(0x20); OLED_Cmd(0x00);
+    OLED_Cmd(0xA1);
+    OLED_Cmd(0xC8);
+    OLED_Cmd(0xDA); OLED_Cmd(0x12);
+    OLED_Cmd(0x81); OLED_Cmd(0xCF);
+    OLED_Cmd(0xD9); OLED_Cmd(0xF1);
+    OLED_Cmd(0xDB); OLED_Cmd(0x40);
+    OLED_Cmd(0xA4);
+    OLED_Cmd(0xA6);
+    OLED_Cmd(0xAF);
+    OLED_Clear();
+}
+
+void OLED_Clear(void) {
+    for (uint8_t p = 0; p < 8; p++) {
+        OLED_SetPos(p, 0);
+        for (uint8_t i = 0; i < 128; i++) OLED_Data(0x00);
+    }
+}
+
+static uint8_t FontIndex(char c) {
+    if (c == ' ') return 0;
+    if (c >= '0' && c <= '9') return 1 + (c - '0');
+    if (c >= 'a' && c <= 'z') c -= 32;
+    if (c >= 'A' && c <= 'Z') return 11 + (c - 'A');
+    if (c == ':') return 37;
+    if (c == '=') return 38;
+    if (c == ',') return 39;
+    if (c == '.') return 40;
+    if (c == '-') return 41;
+    return 0;
+}
+
+void OLED_ShowString(uint8_t x, uint8_t page, const char *str) {
+    OLED_SetPos(page, x);
+    while (*str) {
+        uint8_t idx = FontIndex(*str++);
+        for (uint8_t i = 0; i < 5; i++) OLED_Data(Font5x7[idx][i]);
+        OLED_Data(0x00);
+    }
+}
+
+void OLED_ShowNum(uint8_t x, uint8_t page, uint32_t num, uint8_t len) {
+    char buf[12];
+    if (len > 10) len = 10;
+    for (uint8_t i = 0; i < len; i++) {
+        buf[len - 1 - i] = (char)('0' + (num % 10));
+        num /= 10;
+    }
+    buf[len] = '\0';
+    OLED_ShowString(x, page, buf);
+}

@@ -1,0 +1,10 @@
+# Build output
+build/
+
+# CLion
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+*.bak
