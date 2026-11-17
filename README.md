@@ -128,7 +128,10 @@ openocd -f interface/stlink-v2.cfg -f target/stm32f1x.cfg \
 
 ## 七、演示视频
 
-仓库内文件：[video/demo.mp4](video/demo.mp4)
+仓库内文件：
+
+- [video/demo_1.mp4](video/demo_1.mp4)
+- [video/demo_2.mp4](video/demo_2.mp4)
 
 ## 八、思考题
 
